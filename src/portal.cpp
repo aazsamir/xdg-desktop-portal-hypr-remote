@@ -43,48 +43,121 @@ bool Portal::init(LibEIHandler* handler) {
         connection = sdbus::createSessionBusConnection();
         
         // Request the portal name
-        connection->requestName(PORTAL_NAME);
+        connection->requestName(sdbus::ServiceName{PORTAL_NAME});
         
         // Create the portal object
-        object = sdbus::createObject(*connection, PORTAL_PATH);
+        object = sdbus::createObject(*connection, sdbus::ObjectPath{PORTAL_PATH});
         std::cout << "Portal D-Bus interface registered at " << PORTAL_NAME << std::endl;
         std::cout << "Portal registered on SESSION bus (not system bus)" << std::endl;
         std::cout << "Portal version: 2" << std::endl;
         std::cout << "Portal path: " << PORTAL_PATH << std::endl;
         std::cout << "Portal interface: " << PORTAL_INTERFACE << std::endl;
 
-        // Register RemoteDesktop interface methods with correct signatures
-        object->registerMethod(PORTAL_INTERFACE, "CreateSession", "oosa{sv}", "ua{sv}", 
-                              [this](sdbus::MethodCall call) { CreateSession(std::move(call)); });
+        // Register RemoteDesktop interface methods with correct signatures using new VTable API
+        auto createSession = sdbus::registerMethod("CreateSession");
+        createSession.inputSignature = "oosa{sv}";
+        createSession.outputSignature = "ua{sv}";
+        createSession.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            std::map<std::string, sdbus::Variant> response;
+            response["session_handle"] = sdbus::Variant(sess);
+            return std::make_tuple(static_cast<uint32_t>(0), response);
+        });
         
-        /* object->registerMethod(PORTAL_INTERFACE, "SelectSources", "oosa{sv}", "ua{sv}", 
-                              [this](sdbus::MethodCall call) { SelectSources(std::move(call)); }); */
+        auto selectDevices = sdbus::registerMethod("SelectDevices");
+        selectDevices.inputSignature = "oosa{sv}";
+        selectDevices.outputSignature = "ua{sv}";
+        selectDevices.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            std::map<std::string, sdbus::Variant> response;
+            response["types"] = sdbus::Variant(static_cast<uint32_t>(7));
+            return std::make_tuple(static_cast<uint32_t>(0), response);
+        });
         
-        object->registerMethod(PORTAL_INTERFACE, "SelectDevices", "oosa{sv}", "ua{sv}", 
-                              [this](sdbus::MethodCall call) { SelectDevices(std::move(call)); });
+        auto start = sdbus::registerMethod("Start");
+        start.inputSignature = "oossa{sv}";
+        start.outputSignature = "ua{sv}";
+        start.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::string parent, std::map<std::string, sdbus::Variant> opts) {
+            std::map<std::string, sdbus::Variant> response;
+            response["devices"] = sdbus::Variant(static_cast<uint32_t>(7));
+            return std::make_tuple(static_cast<uint32_t>(0), response);
+        });
         
-        object->registerMethod(PORTAL_INTERFACE, "Start", "oossa{sv}", "ua{sv}", 
-                              [this](sdbus::MethodCall call) { Start(std::move(call)); });
+        auto notifyPointerMotion = sdbus::registerMethod("NotifyPointerMotion");
+        notifyPointerMotion.inputSignature = "oa{sv}dd";
+        notifyPointerMotion.outputSignature = "";
+        notifyPointerMotion.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, double dx, double dy) {
+            if (libei_handler && libei_handler->pointer) {
+                uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                libei_handler->pointer->send_motion(time, dx, dy);
+                libei_handler->pointer->send_frame();
+            }
+        });
         
-        // Add the input notification methods that clients call to send input events
-        object->registerMethod(PORTAL_INTERFACE, "NotifyPointerMotion", "oa{sv}dd", "", 
-                              [this](sdbus::MethodCall call) { NotifyPointerMotion(std::move(call)); });
+        auto notifyPointerButton = sdbus::registerMethod("NotifyPointerButton");
+        notifyPointerButton.inputSignature = "oa{sv}iu";
+        notifyPointerButton.outputSignature = "";
+        notifyPointerButton.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, int32_t button, uint32_t state) {
+            if (libei_handler && libei_handler->pointer) {
+                uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                libei_handler->pointer->send_button(time, static_cast<uint32_t>(button), state);
+                libei_handler->pointer->send_frame();
+            }
+        });
         
-        object->registerMethod(PORTAL_INTERFACE, "NotifyPointerButton", "oa{sv}iu", "", 
-                              [this](sdbus::MethodCall call) { NotifyPointerButton(std::move(call)); });
+        auto notifyKeyboardKeycode = sdbus::registerMethod("NotifyKeyboardKeycode");
+        notifyKeyboardKeycode.inputSignature = "oa{sv}iu";
+        notifyKeyboardKeycode.outputSignature = "";
+        notifyKeyboardKeycode.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, int32_t keycode, uint32_t state) {
+            if (libei_handler && libei_handler->keyboard) {
+                uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                libei_handler->keyboard->send_key(time, static_cast<uint32_t>(keycode), state);
+            }
+        });
         
-        object->registerMethod(PORTAL_INTERFACE, "NotifyKeyboardKeycode", "oa{sv}iu", "", 
-                              [this](sdbus::MethodCall call) { NotifyKeyboardKeycode(std::move(call)); });
+        auto notifyPointerAxis = sdbus::registerMethod("NotifyPointerAxis");
+        notifyPointerAxis.inputSignature = "oa{sv}dd";
+        notifyPointerAxis.outputSignature = "";
+        notifyPointerAxis.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, double dx, double dy) {
+            if (libei_handler && libei_handler->pointer) {
+                uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                libei_handler->pointer->send_axis_source(WL_POINTER_AXIS_SOURCE_WHEEL);
+                if (dx != 0.0) {
+                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx, dy);
+                    libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
+                }
+                if (dy != 0.0) {
+                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dx, dy);
+                    libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_VERTICAL_SCROLL);
+                }
+                libei_handler->pointer->send_frame();
+            }
+        });
         
-        object->registerMethod(PORTAL_INTERFACE, "NotifyPointerAxis", "oa{sv}dd", "", 
-                              [this](sdbus::MethodCall call) { NotifyPointerAxis(std::move(call)); });
+        auto connectToEIS = sdbus::registerMethod("ConnectToEIS");
+        connectToEIS.inputSignature = "osa{sv}";
+        connectToEIS.outputSignature = "h";
+        connectToEIS.implementedAs([this](sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            return ConnectToEIS_impl(sess, app, opts);
+        });
         
-        // Modern EIS (Emulated Input Server) method - this is what deskflow actually uses!
-        object->registerMethod(PORTAL_INTERFACE, "ConnectToEIS", "osa{sv}", "h", 
-                              [this](sdbus::MethodCall call) { ConnectToEIS(std::move(call)); });
-        object->registerProperty(PORTAL_INTERFACE, "version", "u", [](sdbus::PropertyGetReply& reply) -> void { reply << (uint)2; });
-        // Finalize the object
-        object->finishRegistration();
+        auto versionProp = sdbus::registerProperty("version");
+        versionProp.withGetter([](){ return static_cast<uint32_t>(2); });
+        
+        object->addVTable(
+            sdbus::InterfaceName{PORTAL_INTERFACE},
+            std::move(createSession),
+            std::move(selectDevices),
+            std::move(start),
+            std::move(notifyPointerMotion),
+            std::move(notifyPointerButton),
+            std::move(notifyKeyboardKeycode),
+            std::move(notifyPointerAxis),
+            std::move(connectToEIS),
+            std::move(versionProp)
+        );
         
         std::cout << "Portal D-Bus interface registered at " << PORTAL_NAME << std::endl;
         std::cout << "Portal registered on SESSION bus (not system bus)" << std::endl;
@@ -137,338 +210,28 @@ void Portal::stop() {
     }
 }
 
-void Portal::CreateSession(sdbus::MethodCall call) {
-    std::cout << "🔥 RemoteDesktop CreateSession called!" << std::endl;
-    std::cout << "📋 FLOW: Step 1/4 - CreateSession" << std::endl;
-    std::cout << "🎯 This indicates deskflow found our portal!" << std::endl;
-    
-    // Extract parameters according to D-Bus signature "oosa{sv}"
-    sdbus::ObjectPath request_handle;
-    sdbus::ObjectPath session_handle;
-    std::string app_id;
-    std::map<std::string, sdbus::Variant> options;
-    
-    try {
-        call >> request_handle >> session_handle >> app_id >> options;
-        
-        std::cout << "Request handle: " << request_handle << std::endl;
-        std::cout << "Session handle: " << session_handle << std::endl;
-        std::cout << "App ID: " << app_id << std::endl;
-        std::cout << "Options received:" << std::endl;
-        for (const auto& option : options) {
-            std::cout << "  " << option.first << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error extracting CreateSession parameters: " << e.what() << std::endl;
-        auto reply = call.createReply();
-        reply << static_cast<uint32_t>(1); // Error
-        reply << std::map<std::string, sdbus::Variant>{};
-        reply.send();
-        return;
-    }
-    
-    // Create session response
-    std::map<std::string, sdbus::Variant> response;
-    response["session_handle"] = sdbus::Variant(session_handle);
-    
-    auto reply = call.createReply();
-    reply << static_cast<uint32_t>(0); // Success
-    reply << response;
-    reply.send();
-    
-    std::cout << "✅ CreateSession completed successfully" << std::endl;
-    std::cout << "📋 NEXT: Client should call SelectDevices or Start" << std::endl;
-}
-
-void Portal::SelectSources(sdbus::MethodCall call) {
-    std::cout << "🔥 RemoteDesktop SelectSources called!" << std::endl;
-    
-    // Extract parameters
-    sdbus::ObjectPath session_handle;
-    std::map<std::string, sdbus::Variant> options;
-    call >> session_handle >> options;
+sdbus::UnixFd Portal::ConnectToEIS_impl(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options) {
+    std::cout << "🔥 RemoteDesktop ConnectToEIS called!" << std::endl;
+    std::cout << "📋 FLOW: Step 5/5 - Connect to EIS (Modern approach!)" << std::endl;
+    std::cout << "🎯 THIS IS THE KEY METHOD! Deskflow uses this for input!" << std::endl;
     
     std::cout << "Session handle: " << session_handle << std::endl;
+    std::cout << "App ID: " << app_id << std::endl;
     std::cout << "Options received:" << std::endl;
     for (const auto& option : options) {
         std::cout << "  " << option.first << std::endl;
     }
     
-    // Response - allow all sources
-    std::map<std::string, sdbus::Variant> response;
-    response["types"] = sdbus::Variant(static_cast<uint32_t>(7)); // keyboard | pointer | touchscreen
-    
-    auto reply = call.createReply();
-    reply << static_cast<uint32_t>(0); // Success
-    reply << response;
-    reply.send();
-    
-    std::cout << "✅ SelectSources completed for session: " << session_handle << std::endl;
-}
-
-void Portal::SelectDevices(sdbus::MethodCall call) {
-    std::cout << "🔥 RemoteDesktop SelectDevices called!" << std::endl;
-    std::cout << "📋 FLOW: Step 2/4 - SelectDevices" << std::endl;
-    
-    // Extract parameters according to D-Bus signature "oosa{sv}"
-    sdbus::ObjectPath request_handle;
-    sdbus::ObjectPath session_handle;
-    std::string app_id;
-    std::map<std::string, sdbus::Variant> options;
-    
-    try {
-        call >> request_handle >> session_handle >> app_id >> options;
-        
-        std::cout << "Request handle: " << request_handle << std::endl;
-        std::cout << "Session handle: " << session_handle << std::endl;
-        std::cout << "App ID: " << app_id << std::endl;
-        std::cout << "Options received:" << std::endl;
-        for (const auto& option : options) {
-            std::cout << "  " << option.first << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error extracting SelectDevices parameters: " << e.what() << std::endl;
-        auto reply = call.createReply();
-        reply << static_cast<uint32_t>(1); // Error
-        reply << std::map<std::string, sdbus::Variant>{};
-        reply.send();
-        return;
-    }
-    
-    // Response - allow all devices
-    std::map<std::string, sdbus::Variant> response;
-    response["types"] = sdbus::Variant(static_cast<uint32_t>(7)); // keyboard | pointer | touchscreen
-    
-    auto reply = call.createReply();
-    reply << static_cast<uint32_t>(0); // Success
-    reply << response;
-    reply.send();
-    
-    std::cout << "✅ SelectDevices completed for session: " << session_handle << std::endl;
-    std::cout << "📋 NEXT: Client should call Start" << std::endl;
-}
-
-void Portal::Start(sdbus::MethodCall call) {
-    std::cout << "🔥 RemoteDesktop Start called - This is where the magic happens!" << std::endl;
-    std::cout << "📋 FLOW: Step 3/4 - Start session" << std::endl;
-    std::cout << "🎯 If you see this, deskflow is following the portal flow correctly!" << std::endl;
-
-    // Extract parameters according to D-Bus signature "oossa{sv}"
-    sdbus::ObjectPath request_handle;
-    sdbus::ObjectPath session_handle;
-    std::string app_id;
-    std::string parent_window;
-    std::map<std::string, sdbus::Variant> options;
-    
-    try {
-        call >> request_handle >> session_handle >> app_id >> parent_window >> options;
-        
-        std::cout << "Request handle: " << request_handle << std::endl;
-        std::cout << "Session handle: " << session_handle << std::endl;
-        std::cout << "App ID: " << app_id << std::endl;
-        std::cout << "Parent window: " << parent_window << std::endl;
-        std::cout << "Options received:" << std::endl;
-        for (const auto& option : options) {
-            std::cout << "  " << option.first << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error extracting Start parameters: " << e.what() << std::endl;
-        auto reply = call.createReply();
-        reply << static_cast<uint32_t>(1); // Error
-        reply << std::map<std::string, sdbus::Variant>{};
-        reply.send();
-        return;
-    }
-    
-    // Check if we have a working LibEI handler
-    if (!libei_handler) {
-        std::cerr << "No LibEI handler available for remote session" << std::endl;
-        auto reply = call.createReply();
-        reply << static_cast<uint32_t>(1); // Error
-        reply << std::map<std::string, sdbus::Variant>{};
-        reply.send();
-        return;
-    }
-    
-    std::cout << "✅ Using existing LibEI handler for input processing" << std::endl;
-    
-    // Start the remote desktop session
-    std::map<std::string, sdbus::Variant> response;
-    response["devices"] = sdbus::Variant(static_cast<uint32_t>(7)); // keyboard | pointer | touchscreen
-    
-    auto reply = call.createReply();
-    reply << static_cast<uint32_t>(0); // Success
-    reply << response;
-    reply.send();
-    
-    std::cout << "Start completed - remote desktop session active for session: " << session_handle << std::endl;
-    std::cout << "LibEI handler ready for input processing" << std::endl;
-    std::cout << "📋 NEXT: Client should now call ConnectToEIS for modern input" << std::endl;
-}
-
-void Portal::NotifyPointerMotion(sdbus::MethodCall call) {
-    std::cout << "🖱️ NotifyPointerMotion called!" << std::endl;
-    std::cout << "📋 FLOW: Step 4/4 - Input events (Mouse Motion)" << std::endl;
-    std::cout << "🎯 DESKFLOW IS USING LEGACY NOTIFY METHODS!" << std::endl;
-    
-    // Extract parameters
-    sdbus::ObjectPath session_handle;
-    std::map<std::string, sdbus::Variant> options;
-    double dx, dy;
-    call >> session_handle >> options >> dx >> dy;
-    
-    std::cout << "Session: " << session_handle << ", Motion: dx=" << dx << ", dy=" << dy << std::endl;
-    
-    // Get current time for wayland events
-    uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
-    
-    // Forward to virtual pointer via libei handler's virtual pointer
-    if (libei_handler && libei_handler->pointer) {
-        libei_handler->pointer->send_motion(time, dx, dy);
-        libei_handler->pointer->send_frame();
-        std::cout << "✅ Motion forwarded to virtual pointer" << std::endl;
-    } else {
-        std::cout << "❌ No virtual pointer available" << std::endl;
-    }
-    
-    auto reply = call.createReply();
-    reply.send();
-}
-
-void Portal::NotifyPointerButton(sdbus::MethodCall call) {
-    std::cout << "🖱️ NotifyPointerButton called!" << std::endl;
-    
-    // Extract parameters
-    sdbus::ObjectPath session_handle;
-    std::map<std::string, sdbus::Variant> options;
-    int32_t button;
-    uint32_t state;
-    call >> session_handle >> options >> button >> state;
-    
-    std::cout << "Session: " << session_handle << ", Button: " << button << ", State: " << state << std::endl;
-    
-    // Get current time for wayland events
-    uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
-    
-    // Forward to virtual pointer
-    if (libei_handler && libei_handler->pointer) {
-        libei_handler->pointer->send_button(time, static_cast<uint32_t>(button), state);
-        libei_handler->pointer->send_frame();
-        std::cout << "✅ Button event forwarded to virtual pointer" << std::endl;
-    } else {
-        std::cout << "❌ No virtual pointer available" << std::endl;
-    }
-    
-    auto reply = call.createReply();
-    reply.send();
-}
-
-void Portal::NotifyKeyboardKeycode(sdbus::MethodCall call) {
-    std::cout << "⌨️ NotifyKeyboardKeycode called!" << std::endl;
-    
-    // Extract parameters
-    sdbus::ObjectPath session_handle;
-    std::map<std::string, sdbus::Variant> options;
-    int32_t keycode;
-    uint32_t state;
-    call >> session_handle >> options >> keycode >> state;
-    
-    std::cout << "Session: " << session_handle << ", Keycode: " << keycode << ", State: " << state << std::endl;
-    
-    // Get current time for wayland events
-    uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
-    
-    // Forward to virtual keyboard
-    if (libei_handler && libei_handler->keyboard) {
-        libei_handler->keyboard->send_key(time, static_cast<uint32_t>(keycode), state);
-        std::cout << "✅ Key event forwarded to virtual keyboard" << std::endl;
-    } else {
-        std::cout << "❌ No virtual keyboard available" << std::endl;
-    }
-    
-    auto reply = call.createReply();
-    reply.send();
-}
-
-void Portal::NotifyPointerAxis(sdbus::MethodCall call) {
-    std::cout << "🖱️ NotifyPointerAxis called!" << std::endl;
-    
-    // Extract parameters
-    sdbus::ObjectPath session_handle;
-    std::map<std::string, sdbus::Variant> options;
-    double dx, dy;
-    call >> session_handle >> options >> dx >> dy;
-    
-    std::cout << "Session: " << session_handle << ", Axis: dx=" << dx << ", dy=" << dy << std::endl;
-    
-    // Get current time for wayland events
-    uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
-    
-    // Forward to virtual pointer with proper Wayland scroll protocol
-    if (libei_handler && libei_handler->pointer) {
-        // Set axis source for legacy scroll events
-        libei_handler->pointer->send_axis_source(WL_POINTER_AXIS_SOURCE_WHEEL);
-        
-        // Send scroll events for both axes if non-zero
-        if (dx != 0.0) {
-            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx, dy);
-            libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
-        }
-        if (dy != 0.0) {
-            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dx, dy);
-            libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_VERTICAL_SCROLL);
-        }
-        libei_handler->pointer->send_frame();
-        std::cout << "✅ Legacy axis event forwarded with proper scroll protocol" << std::endl;
-    } else {
-        std::cout << "❌ No virtual pointer available" << std::endl;
-    }
-    
-    auto reply = call.createReply();
-    reply.send();
-}
-
-void Portal::ConnectToEIS(sdbus::MethodCall call) {
-    std::cout << "🔥 RemoteDesktop ConnectToEIS called!" << std::endl;
-    std::cout << "📋 FLOW: Step 5/5 - Connect to EIS (Modern approach!)" << std::endl;
-    std::cout << "🎯 THIS IS THE KEY METHOD! Deskflow uses this for input!" << std::endl;
-    
-    // Extract parameters according to D-Bus signature "osa{sv}"
-    sdbus::ObjectPath session_handle;
-    std::string app_id;
-    std::map<std::string, sdbus::Variant> options;
-    
-    try {
-        call >> session_handle >> app_id >> options;
-        
-        std::cout << "Session handle: " << session_handle << std::endl;
-        std::cout << "App ID: " << app_id << std::endl;
-        std::cout << "Options received:" << std::endl;
-        for (const auto& option : options) {
-            std::cout << "  " << option.first << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error extracting ConnectToEIS parameters: " << e.what() << std::endl;
-        call.createErrorReply(sdbus::Error("org.freedesktop.portal.Error.Failed", "Failed to extract parameters")).send();
-        return;
-    }
-    
     if (!libei_handler || !libei_handler->keyboard || !libei_handler->pointer) {
         std::cerr << "Virtual devices not available" << std::endl;
-        call.createErrorReply(sdbus::Error("org.freedesktop.portal.Error.Failed", "Virtual devices not available")).send();
-        return;
+        throw sdbus::Error(sdbus::Error::Name{"org.freedesktop.portal.Error.Failed"}, "Virtual devices not available");
     }
     
     // Create a socket pair - one end for deskflow, one end for our EIS server
     int socket_pair[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, socket_pair) == -1) {
         std::cerr << "Error creating socket pair: " << strerror(errno) << std::endl;
-        call.createErrorReply(sdbus::Error("org.freedesktop.portal.Error.Failed", "Failed to create socket pair")).send();
-        return;
+        throw sdbus::Error(sdbus::Error::Name{"org.freedesktop.portal.Error.Failed"}, "Failed to create socket pair");
     }
     
     int client_fd = socket_pair[0];  // This goes to deskflow
@@ -651,17 +414,12 @@ void Portal::ConnectToEIS(sdbus::MethodCall call) {
         close(server_fd);
     }).detach();
     
-    // Return the client file descriptor to deskflow
-    auto reply = call.createReply();
-    
-    // Create a unix file descriptor object and pass it to the client
-    sdbus::UnixFd unix_fd{client_fd};
-    reply << unix_fd;
-    reply.send();
-    
     std::cout << "✅ ConnectToEIS completed - socket fd sent to deskflow" << std::endl;
     std::cout << "🎯 Deskflow can now send EIS events through fd " << client_fd << std::endl;
     std::cout << "📡 Proper EIS server thread is running with socket bridge" << std::endl;
+    
+    // Return the client file descriptor to deskflow
+    return sdbus::UnixFd{client_fd};
 }
 
 void Portal::handle_eis_event(struct eis_event* event) {

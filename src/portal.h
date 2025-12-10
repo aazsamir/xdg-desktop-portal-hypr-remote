@@ -41,20 +41,8 @@ private:
     
     void update_modifier_state(uint32_t keycode, bool is_press);
     
-    // D-Bus method handlers
-    void CreateSession(sdbus::MethodCall call);
-    void SelectSources(sdbus::MethodCall call);
-    void SelectDevices(sdbus::MethodCall call);
-    void Start(sdbus::MethodCall call);
-    
-    // Input notification methods - these are called by remote clients to send input events
-    void NotifyPointerMotion(sdbus::MethodCall call);
-    void NotifyPointerButton(sdbus::MethodCall call);
-    void NotifyKeyboardKeycode(sdbus::MethodCall call);
-    void NotifyPointerAxis(sdbus::MethodCall call);
-    
-    // Modern EIS (Emulated Input Server) method
-    void ConnectToEIS(sdbus::MethodCall call);
+    // Modern EIS (Emulated Input Server) method implementation
+    sdbus::UnixFd ConnectToEIS_impl(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options);
     
     // EIS event handling
     void handle_eis_event(struct eis_event* event);

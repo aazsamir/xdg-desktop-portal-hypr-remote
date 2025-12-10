@@ -27,8 +27,8 @@ Interfaces=org.freedesktop.impl.portal.RemoteDesktop
 EOF
 
 echo "✓ Development files created:"
-echo "  Service: ~/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.hyprland.dev.service"
-echo "  Portal:  ~/.local/share/xdg-desktop-portal/portals/hyprland-dev.portal"
+echo "  Service: ~/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.hypr-remote.service"
+echo "  Portal:  ~/.local/share/xdg-desktop-portal/portals/hypr-remote.portal"
 echo
 
 # Test the portal

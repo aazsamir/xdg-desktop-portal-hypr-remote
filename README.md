@@ -1,3 +1,7 @@
+# Notice
+
+This is a fork of https://github.com/gac3k/xdg-desktop-portal-hypr-remote. It has been modified to use new dbus interfaces, it is largely vibe-coded and done due to personal interest. It seems to work fine for using Hyprland with kdeconnect.
+
 # Hyprland Remote Desktop Portal
 
 A complete implementation of the `org.freedesktop.impl.portal.RemoteDesktop` portal for Hyprland, providing remote desktop capabilities using libei and Wayland virtual input protocols.

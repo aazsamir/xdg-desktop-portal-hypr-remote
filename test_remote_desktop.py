@@ -44,9 +44,6 @@ def test_remote_desktop_portal():
     except dbus.exceptions.DBusException as e:
         print(f"❌ D-Bus error: {e}")
         return False
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
 
 if __name__ == '__main__':
     print("🔥 Testing RemoteDesktop Portal")
