@@ -140,7 +140,7 @@ bool Portal::init(LibEIHandler* handler) {
         connectToEIS.inputSignature = "osa{sv}";
         connectToEIS.outputSignature = "h";
         connectToEIS.implementedAs([this](sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
-            return ConnectToEIS_impl(sess, app, opts);
+            return ConnectToEIS(sess, app, opts);
         });
         
         auto versionProp = sdbus::registerProperty("version");
@@ -210,10 +210,9 @@ void Portal::stop() {
     }
 }
 
-sdbus::UnixFd Portal::ConnectToEIS_impl(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options) {
+sdbus::UnixFd Portal::ConnectToEIS(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options) {
     std::cout << "🔥 RemoteDesktop ConnectToEIS called!" << std::endl;
-    std::cout << "📋 FLOW: Step 5/5 - Connect to EIS (Modern approach!)" << std::endl;
-    std::cout << "🎯 THIS IS THE KEY METHOD! Deskflow uses this for input!" << std::endl;
+    std::cout << "📋 FLOW: Step 5/5 - Connect to EIS" << std::endl;
     
     std::cout << "Session handle: " << session_handle << std::endl;
     std::cout << "App ID: " << app_id << std::endl;

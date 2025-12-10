@@ -61,9 +61,17 @@ int main(int argc, char* argv[]) {
     // Initialize portal
     if (!portal.init(&libeiHandler)) {
         std::cerr << "Failed to initialize D-Bus portal" << std::endl;
+        libeiHandler.stop();
+
+        if (libei_thread.joinable()) {
+            libei_thread.join();
+        }
+
         libeiHandler.cleanup();
         waylandVP.cleanup();
         waylandVK.cleanup();
+        std::cerr << "Exiting..." << std::endl;
+
         return 1;
     }
     std::cout << "✓ D-Bus portal initialized" << std::endl;

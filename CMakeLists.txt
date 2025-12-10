@@ -162,7 +162,7 @@ set(SYSTEMD_SERVICES
     ON
     CACHE BOOL "Install systemd service file")
 include(GNUInstallDirs)
-set(LIBEXECDIR ${CMAKE_INSTALL_FULL_LIBEXECDIR})
+set(LIBEXECDIR ${CMAKE_INSTALL_FULL_BINDIR})
 configure_file(org.freedesktop.impl.portal.desktop.hypr-remote.service.in
                org.freedesktop.impl.portal.desktop.hypr-remote.service @ONLY)
 if(SYSTEMD_SERVICES)

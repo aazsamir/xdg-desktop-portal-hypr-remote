@@ -42,7 +42,7 @@ private:
     void update_modifier_state(uint32_t keycode, bool is_press);
     
     // Modern EIS (Emulated Input Server) method implementation
-    sdbus::UnixFd ConnectToEIS_impl(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options);
+    sdbus::UnixFd ConnectToEIS(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options);
     
     // EIS event handling
     void handle_eis_event(struct eis_event* event);

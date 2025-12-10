@@ -7,6 +7,6 @@ ConditionEnvironment=WAYLAND_DISPLAY
 [Service]
 Type=dbus
 BusName=org.freedesktop.impl.portal.desktop.hypr-remote
-ExecStart=/usr/local/bin/xdg-desktop-portal-hypr-remote
+ExecStart=@LIBEXECDIR@/xdg-desktop-portal-hypr-remote
 Restart=on-failure
 Slice=session.slice
