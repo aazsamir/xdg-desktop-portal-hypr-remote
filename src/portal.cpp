@@ -14,6 +14,7 @@
 #include <poll.h>
 #include <algorithm>
 #include <sys/mman.h>
+#include <xkbcommon/xkbcommon.h>
 #include <fcntl.h>
 
 extern "C" {
@@ -28,11 +29,18 @@ static const char* PORTAL_PATH = "/org/freedesktop/portal/desktop";
 // Use development name if requested, otherwise use standard name
 static const char* PORTAL_NAME = "org.freedesktop.impl.portal.desktop.hypr-remote";
 
-Portal::Portal() : libei_handler(nullptr), running(false) {
+Portal::Portal() : libei_handler(nullptr), running(false), verbose(false) {
 }
 
 Portal::~Portal() {
     cleanup();
+}
+
+void Portal::setVerbose(bool v) {
+    verbose = v;
+    if (verbose) {
+        std::cout << "🔍 Verbose debugging enabled for Portal" << std::endl;
+    }
 }
 
 bool Portal::init(LibEIHandler* handler) {
@@ -58,8 +66,19 @@ bool Portal::init(LibEIHandler* handler) {
         createSession.inputSignature = "oosa{sv}";
         createSession.outputSignature = "ua{sv}";
         createSession.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            std::cout << "🔥 RemoteDesktop CreateSession called!" << std::endl;
+            if (verbose) {
+                std::cout << "  Request handle: " << req << std::endl;
+                std::cout << "  Session handle: " << sess << std::endl;
+                std::cout << "  App ID: " << app << std::endl;
+                std::cout << "  Options: " << opts.size() << " entries" << std::endl;
+                for (const auto& [key, val] : opts) {
+                    std::cout << "    - " << key << std::endl;
+                }
+            }
             std::map<std::string, sdbus::Variant> response;
             response["session_handle"] = sdbus::Variant(sess);
+            std::cout << "✅ CreateSession completed" << std::endl;
             return std::make_tuple(static_cast<uint32_t>(0), response);
         });
         
@@ -67,8 +86,15 @@ bool Portal::init(LibEIHandler* handler) {
         selectDevices.inputSignature = "oosa{sv}";
         selectDevices.outputSignature = "ua{sv}";
         selectDevices.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            if (verbose) {
+                std::cout << "🔥 RemoteDesktop SelectDevices called!" << std::endl;
+                std::cout << "  Request handle: " << req << std::endl;
+                std::cout << "  Session handle: " << sess << std::endl;
+                std::cout << "  App ID: " << app << std::endl;
+                std::cout << "  Options: " << opts.size() << " entries" << std::endl;
+            }
             std::map<std::string, sdbus::Variant> response;
-            response["types"] = sdbus::Variant(static_cast<uint32_t>(7));
+            response["types"] = sdbus::Variant(static_cast<uint32_t>(7)); // keyboard | pointer | touchscreen
             return std::make_tuple(static_cast<uint32_t>(0), response);
         });
         
@@ -76,8 +102,16 @@ bool Portal::init(LibEIHandler* handler) {
         start.inputSignature = "oossa{sv}";
         start.outputSignature = "ua{sv}";
         start.implementedAs([this](sdbus::ObjectPath req, sdbus::ObjectPath sess, std::string app, std::string parent, std::map<std::string, sdbus::Variant> opts) {
+            if (verbose) {
+                std::cout << "🔥 RemoteDesktop Start called!" << std::endl;
+                std::cout << "  Request handle: " << req << std::endl;
+                std::cout << "  Session handle: " << sess << std::endl;
+                std::cout << "  App ID: " << app << std::endl;
+                std::cout << "  Parent window: " << parent << std::endl;
+                std::cout << "  Options: " << opts.size() << " entries" << std::endl;
+            }
             std::map<std::string, sdbus::Variant> response;
-            response["devices"] = sdbus::Variant(static_cast<uint32_t>(7));
+            response["devices"] = sdbus::Variant(static_cast<uint32_t>(7)); // keyboard | pointer | touchscreen
             return std::make_tuple(static_cast<uint32_t>(0), response);
         });
         
@@ -85,6 +119,9 @@ bool Portal::init(LibEIHandler* handler) {
         notifyPointerMotion.inputSignature = "oa{sv}dd";
         notifyPointerMotion.outputSignature = "";
         notifyPointerMotion.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, double dx, double dy) {
+            if (verbose) {
+                std::cout << "🖱️ NotifyPointerMotion: dx=" << dx << " dy=" << dy << std::endl;
+            }
             if (libei_handler && libei_handler->pointer) {
                 uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -97,6 +134,9 @@ bool Portal::init(LibEIHandler* handler) {
         notifyPointerButton.inputSignature = "oa{sv}iu";
         notifyPointerButton.outputSignature = "";
         notifyPointerButton.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, int32_t button, uint32_t state) {
+            if (verbose) {
+                std::cout << "🖱️ NotifyPointerButton: button=" << button << " state=" << state << std::endl;
+            }
             if (libei_handler && libei_handler->pointer) {
                 uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -109,10 +149,54 @@ bool Portal::init(LibEIHandler* handler) {
         notifyKeyboardKeycode.inputSignature = "oa{sv}iu";
         notifyKeyboardKeycode.outputSignature = "";
         notifyKeyboardKeycode.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, int32_t keycode, uint32_t state) {
+            if (verbose) {
+                std::cout << "⌨️ NotifyKeyboardKeycode: keycode=" << keycode << " state=" << state << std::endl;
+            }
             if (libei_handler && libei_handler->keyboard) {
                 uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
                 libei_handler->keyboard->send_key(time, static_cast<uint32_t>(keycode), state);
+            }
+        });
+        
+        auto notifyKeyboardKeysym = sdbus::registerMethod("NotifyKeyboardKeysym");
+        notifyKeyboardKeysym.inputSignature = "oa{sv}iu";
+        notifyKeyboardKeysym.outputSignature = "";
+        notifyKeyboardKeysym.implementedAs([this](sdbus::ObjectPath sess, std::map<std::string, sdbus::Variant> opts, int32_t keysym, uint32_t state) {
+            if (verbose) {
+                std::cout << "⌨️ NotifyKeyboardKeysym: keysym=" << keysym << " state=" << state << std::endl;
+            }
+            if (libei_handler && libei_handler->keyboard) {
+                uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                // Convert XKB keysym to Linux keycode using xkbcommon
+                struct xkb_context *ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+                if (ctx) {
+                    struct xkb_keymap *keymap = xkb_keymap_new_from_names(ctx, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS);
+                    if (keymap) {
+                        struct xkb_state *xkb_state = xkb_state_new(keymap);
+                        if (xkb_state) {
+                            // Find keycode for keysym
+                            xkb_keycode_t keycode = 0;
+                            const xkb_keycode_t max_keycode = xkb_keymap_max_keycode(keymap);
+                            for (xkb_keycode_t kc = xkb_keymap_min_keycode(keymap); kc < max_keycode; kc++) {
+                                if (xkb_state_key_get_one_sym(xkb_state, kc) == keysym) {
+                                    keycode = kc;
+                                    break;
+                                }
+                            }
+                            if (keycode > 0) {
+                                // XKB keycodes are offset by 8 from Linux keycodes
+                                libei_handler->keyboard->send_key(time, keycode - 8, state);
+                            } else if (verbose) {
+                                std::cout << "  Failed to find keycode for keysym " << keysym << std::endl;
+                            }
+                            xkb_state_unref(xkb_state);
+                        }
+                        xkb_keymap_unref(keymap);
+                    }
+                    xkb_context_unref(ctx);
+                }
             }
         });
         
@@ -140,6 +224,12 @@ bool Portal::init(LibEIHandler* handler) {
         connectToEIS.inputSignature = "osa{sv}";
         connectToEIS.outputSignature = "h";
         connectToEIS.implementedAs([this](sdbus::ObjectPath sess, std::string app, std::map<std::string, sdbus::Variant> opts) {
+            if (verbose) {
+                std::cout << "🔥 RemoteDesktop ConnectToEIS called!" << std::endl;
+                std::cout << "  Session handle: " << sess << std::endl;
+                std::cout << "  App ID: " << app << std::endl;
+                std::cout << "  Options: " << opts.size() << " entries" << std::endl;
+            }
             return ConnectToEIS(sess, app, opts);
         });
         
@@ -154,6 +244,7 @@ bool Portal::init(LibEIHandler* handler) {
             std::move(notifyPointerMotion),
             std::move(notifyPointerButton),
             std::move(notifyKeyboardKeycode),
+            std::move(notifyKeyboardKeysym),
             std::move(notifyPointerAxis),
             std::move(connectToEIS),
             std::move(versionProp)
@@ -211,14 +302,13 @@ void Portal::stop() {
 }
 
 sdbus::UnixFd Portal::ConnectToEIS(sdbus::ObjectPath session_handle, std::string app_id, std::map<std::string, sdbus::Variant> options) {
-    std::cout << "🔥 RemoteDesktop ConnectToEIS called!" << std::endl;
-    std::cout << "📋 FLOW: Step 5/5 - Connect to EIS" << std::endl;
-    
-    std::cout << "Session handle: " << session_handle << std::endl;
-    std::cout << "App ID: " << app_id << std::endl;
-    std::cout << "Options received:" << std::endl;
-    for (const auto& option : options) {
-        std::cout << "  " << option.first << std::endl;
+    if (verbose) {
+        std::cout << "📋 ConnectToEIS implementation started" << std::endl;
+        std::cout << "  Session: " << session_handle << std::endl;
+        std::cout << "  App: " << app_id << std::endl;
+        for (const auto& [key, val] : options) {
+            std::cout << "  Option: " << key << std::endl;
+        }
     }
     
     if (!libei_handler || !libei_handler->keyboard || !libei_handler->pointer) {
@@ -424,24 +514,26 @@ sdbus::UnixFd Portal::ConnectToEIS(sdbus::ObjectPath session_handle, std::string
 void Portal::handle_eis_event(struct eis_event* event) {
     enum eis_event_type type = eis_event_get_type(event);
     
-    // Log all events for debugging
-    const char* event_name = "UNKNOWN";
-    switch (type) {
-        case EIS_EVENT_CLIENT_CONNECT: event_name = "CLIENT_CONNECT"; break;
-        case EIS_EVENT_CLIENT_DISCONNECT: event_name = "CLIENT_DISCONNECT"; break;
-        case EIS_EVENT_SEAT_BIND: event_name = "SEAT_BIND"; break;
-        case EIS_EVENT_DEVICE_START_EMULATING: event_name = "DEVICE_START_EMULATING"; break;
-        case EIS_EVENT_DEVICE_STOP_EMULATING: event_name = "DEVICE_STOP_EMULATING"; break;
-        case EIS_EVENT_POINTER_MOTION: event_name = "POINTER_MOTION"; break;
-        case EIS_EVENT_POINTER_MOTION_ABSOLUTE: event_name = "POINTER_MOTION_ABSOLUTE"; break;
-        case EIS_EVENT_BUTTON_BUTTON: event_name = "BUTTON_BUTTON"; break;
-        case EIS_EVENT_SCROLL_DELTA: event_name = "SCROLL_DELTA"; break;
-        case EIS_EVENT_SCROLL_DISCRETE: event_name = "SCROLL_DISCRETE"; break;
-        case EIS_EVENT_KEYBOARD_KEY: event_name = "KEYBOARD_KEY"; break;
-        case EIS_EVENT_FRAME: event_name = "FRAME"; break;
-        default: event_name = "UNKNOWN"; break;
+    // Log events based on verbose mode
+    if (verbose) {
+        const char* event_name = "UNKNOWN";
+        switch (type) {
+            case EIS_EVENT_CLIENT_CONNECT: event_name = "CLIENT_CONNECT"; break;
+            case EIS_EVENT_CLIENT_DISCONNECT: event_name = "CLIENT_DISCONNECT"; break;
+            case EIS_EVENT_SEAT_BIND: event_name = "SEAT_BIND"; break;
+            case EIS_EVENT_DEVICE_START_EMULATING: event_name = "DEVICE_START_EMULATING"; break;
+            case EIS_EVENT_DEVICE_STOP_EMULATING: event_name = "DEVICE_STOP_EMULATING"; break;
+            case EIS_EVENT_POINTER_MOTION: event_name = "POINTER_MOTION"; break;
+            case EIS_EVENT_POINTER_MOTION_ABSOLUTE: event_name = "POINTER_MOTION_ABSOLUTE"; break;
+            case EIS_EVENT_BUTTON_BUTTON: event_name = "BUTTON_BUTTON"; break;
+            case EIS_EVENT_SCROLL_DELTA: event_name = "SCROLL_DELTA"; break;
+            case EIS_EVENT_SCROLL_DISCRETE: event_name = "SCROLL_DISCRETE"; break;
+            case EIS_EVENT_KEYBOARD_KEY: event_name = "KEYBOARD_KEY"; break;
+            case EIS_EVENT_FRAME: event_name = "FRAME"; break;
+            default: event_name = "UNKNOWN"; break;
+        }
+        std::cout << "🔥 EIS EVENT: " << event_name << " (type=" << type << ")" << std::endl;
     }
-    //std::cout << "🔥 EIS EVENT: " << event_name << " (type=" << type << ")" << std::endl;
     
     switch (type) {
         case EIS_EVENT_CLIENT_CONNECT: {

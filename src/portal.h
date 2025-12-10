@@ -18,12 +18,14 @@ public:
     void cleanup();
     void run();
     void stop();
+    void setVerbose(bool verbose);
     
 private:
     std::unique_ptr<sdbus::IConnection> connection;
     std::unique_ptr<sdbus::IObject> object;
     LibEIHandler* libei_handler;
     bool running;
+    bool verbose;
     
     // Modifier state tracking for proper key combination handling
     uint32_t modifier_state_depressed = 0;

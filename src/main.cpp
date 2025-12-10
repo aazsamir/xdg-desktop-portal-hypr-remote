@@ -15,11 +15,29 @@ void signal_handler(int signal) {
 }
 
 int main(int argc, char* argv[]) {
+    // Parse command line arguments
+    bool verbose = false;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--verbose" || arg == "-v") {
+            verbose = true;
+        } else if (arg == "--help" || arg == "-h") {
+            std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
+            std::cout << "Options:" << std::endl;
+            std::cout << "  --verbose, -v    Enable verbose debug output" << std::endl;
+            std::cout << "  --help, -h       Show this help message" << std::endl;
+            return 0;
+        }
+    }
+    
     // Set up signal handling
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
     std::cout << "Hyprland Remote Desktop Portal starting..." << std::endl;
+    if (verbose) {
+        std::cout << "[VERBOSE MODE ENABLED]" << std::endl;
+    }
     
     // Initialize components
     WaylandVirtualKeyboard waylandVK;
@@ -57,6 +75,9 @@ int main(int argc, char* argv[]) {
     });
     
     std::cout << "✓ LibEI handler started and ready for connections" << std::endl;
+    
+    // Set verbose mode
+    portal.setVerbose(verbose);
     
     // Initialize portal
     if (!portal.init(&libeiHandler)) {
